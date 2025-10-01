@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Neon Hacker Dashboard — Public IP & Data Usage</title>
+<style>
+  :root{
+    --bg1:#001428;
+    --bg2:#002b55;
+    --neon:#07f;
+    --glass: rgba(255,255,255,0.04);
+    --accent: #7be1ff;
+    --mono: "IBM Plex Mono", "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  }
+
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:
+    radial-gradient(ellipse at 10% 10%, rgba(7,120,255,0.06) 0%, transparent 20%),
+    linear-gradient(120deg,var(--bg1),var(--bg2));
+    color:#cfeeff;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* faint moving grid / lines for vibe */
+  .grid {
+    position:fixed;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:0.18;
+    background-image:
+      linear-gradient(90deg, rgba(0,120,255,0.06) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(0,120,255,0.06) 1px, transparent 1px);
+    background-size: 60px 60px, 60px 60px;
+    animation: drift 18s linear infinite;
+  }
+  @keyframes drift { from {background-position:0 0, 0 0} to{background-position:600px 0, 0 600px} }
+
+  .wrap{
+    display:flex;gap:20px;max-width:1100px;margin:40px auto;padding:30px;border-radius:14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    backdrop-filter: blur(8px) saturate(1.2);
+    box-shadow: 0 8px 40px rgba(2,10,30,0.6), inset 0 0 60px rgba(7,120,255,0.03);
+    border: 1px solid rgba(7,120,255,0.12);
+  }
+
+  .col{flex:1;min-width:260px;}
+  .header{
+    display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;
+  }
+  .title{
+    display:flex;align-items:center;gap:12px;
+  }
+  .logo{
+    width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--neon),#48b0ff);
+    box-shadow:0 6px 30px rgba(7,120,255,0.35), 0 0 22px rgba(7,120,255,0.25) inset;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--mono);color:#001428;
+    transform:rotate(-8deg);
+  }
+  h1{font-size:16px;margin:0;color:var(--accent);letter-spacing:0.6px}
+  p.lead{margin:0;font-size:12px;color:#9edcff}
+
+  .panel{
+    background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));
+    border-radius:10px;padding:18px;border:1px solid rgba(7,120,255,0.08);
+    box-shadow: 0 6px 18px rgba(2,10,30,0.5);
+  }
+
+  .ip {
+    font-family:var(--mono);font-size:28px;color:#e8fbff;
+    display:flex;align-items:center;gap:12px;
+  }
+  .small {font-size:12px;color:#9fd8ff;margin-top:6px}
+  .muted{color:#9fbfd6;font-size:13px}
+
+  .btn {
+    background:transparent;border:1px solid rgba(127,225,255,0.14);padding:8px 12px;border-radius:8px;color:var(--accent);
+    cursor:pointer;font-family:var(--mono);font-size:13px;
+    box-shadow: 0 4px 16px rgba(7,120,255,0.06);
+  }
+  .btn:hover{transform:translateY(-2px);transition:all .12s ease}
+
+  .stat {
+    display:flex;align-items:center;justify-content:space-between;margin-top:10px;
+  }
+  .stat .label{font-size:13px;color:#9fd8ff}
+  .stat .value{font-family:var(--mono);font-size:16px;color:#eaffff}
+
+  .meter {
+    margin-top:12px;height:12px;background:linear-gradient(90deg, rgba(7,120,255,0.12), rgba(7,120,255,0.06));
+    border-radius:8px;overflow:hidden;border:1px solid rgba(7,120,255,0.06);
+  }
+  .meter > i{
+    display:block;height:100%;background:linear-gradient(90deg,#0ff,#06b6ff);width:0%;
+    box-shadow: 0 0 14px rgba(7,120,255,0.5);
+    transition:width .25s linear;
+  }
+
+  pre.console{
+    background:linear-gradient(180deg, rgba(0,12,24,0.45), rgba(0,8,18,0.25));
+    border-radius:8px;padding:12px;color:#bfeaff;font-family:var(--mono);font-size:12px;line-height:1.5;
+    max-height:300px;overflow:auto;border:1px solid rgba(7,120,255,0.06);
+  }
+
+  .footer-note{font-size:12px;color:#9fbfd6;margin-top:10px}
+  .pill {padding:6px 10px;border-radius:999px;background:rgba(7,120,255,0.06);border:1px solid rgba(7,120,255,0.07);font-family:var(--mono)}
+
+  .neon-border {
+    border: 1px solid rgba(7,120,255,0.12);
+    box-shadow: 0 0 40px rgba(7,120,255,0.07), inset 0 0 90px rgba(7,120,255,0.015);
+  }
+
+  /* small screens */
+  @media (max-width:760px){ .wrap{margin:20px;padding:18px;flex-direction:column} .logo{width:48px;height:48px} }
+</style>
+</head>
+<body>
+  <div class="grid" aria-hidden="true"></div>
+
+  <main class="wrap">
+    <div class="col">
+      <div class="header">
+        <div class="title">
+          <div class="logo">IP</div>
+          <div>
+            <h1>Neon Hacker Dashboard</h1>
+            <p class="lead">Public IP · Session Data Usage · Network info</p>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="pill" id="netType">—</div>
+          <div class="muted" style="font-size:11px;margin-top:6px">Your browser</div>
+        </div>
+      </div>
+
+      <div class="panel neon-border">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <div>
+            <div class="ip" id="ipAddress">fetching…</div>
+            <div class="small">Click the IP to copy. Auto-refresh every 60s.</div>
+          </div>
+          <div style="text-align:right">
+            <button class="btn" id="refreshBtn">Refresh</button>
+            <button class="btn" id="copyBtn">Copy</button>
+          </div>
+        </div>
+
+        <div class="stat">
+          <div class="label">ISP / ASN</div>
+          <div class="value" id="isp">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Country / Region</div>
+          <div class="value" id="location">—</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <pre class="console" id="ipConsole">IP log will appear here (timestamps).</pre>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+
+      <div class="panel">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:13px;color:#9fcff8">Session Data Usage</div>
+            <div style="font-family:var(--mono);font-size:18px;margin-top:6px" id="dataUsage">0 B</div>
+            <div class="small">Estimated bytes transferred by this page (resources + measured fetches).</div>
+          </div>
+          <div style="text-align:right">
+            <div class="pill" id="sessionDuration">0s</div><br/>
+            <button class="btn" id="resetBtn" style="margin-top:8px">Reset</button>
+          </div>
+        </div>
+
+        <div class="meter" aria-hidden="true" title="session usage">
+          <i id="meterBar"></i>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Details (live):</div>
+          <pre class="console" id="usageConsole">Waiting for resource timing data...</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:13px;color:#9fcff8">Network Information</div>
+            <div style="font-family:var(--mono);font-size:18px;margin-top:6px" id="downUp">—</div>
+            <div class="small" id="rttSave">Estimated RTT / Effective type</div>
+          </div>
+          <div style="text-align:right">
+            <div class="pill" id="onlineStatus">—</div>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+        <div class="muted">Notes</div>
+        <ul style="color:#9fbfd6">
+          <li>Browser cannot read OS-level total data usage. This page estimates per-page/session usage.</li>
+          <li>Performance API (`transferSize`) is used when supported — results vary by browser and privacy settings.</li>
+        </ul>
+      </div>
+
+      <div style="height:14px"></div>
+
+      <div class="panel">
+        <div class="muted">Advanced</div>
+        <div style="margin-top:8px">
+          <button class="btn" id="measureBtn">Make a test fetch (50 KB)</button>
+          <button class="btn" id="runtestBtn">Run small resource test</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Raw JSON (last IP response):</div>
+          <pre class="console" id="rawJson">—</pre>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+<script>
+/*
+  Neon Hacker Dashboard
+  - Fetches public IP via ipify (https://api.ipify.org?format=json)
+  - Stores a small log and auto-refreshes every 60s
+  - Estimates session/page data usage using:
+      * response.blob().size for measured fetches
+      * performance.getEntriesByType('resource') transferSize when available
+  - Limitations: cannot read OS total network stats; results depend on browser.
+*/
+
+// Configuration
+const IP_API = 'https://api.ipify.org?format=json'; // simple CORS-friendly service
+const GEO_API = 'https://ipapi.co/'; // we'll try ipapi.co/{ip}/json for geo+org (if CORS allows)
+
+const ipAddressEl = document.getElementById('ipAddress');
+const ispEl = document.getElementById('isp');
+const locationEl = document.getElementById('location');
+const ipConsole = document.getElementById('ipConsole');
+const rawJson = document.getElementById('rawJson');
+const refreshBtn = document.getElementById('refreshBtn');
+const copyBtn = document.getElementById('copyBtn');
+const measureBtn = document.getElementById('measureBtn');
+const runtestBtn = document.getElementById('runtestBtn');
+
+const dataUsageEl = document.getElementById('dataUsage');
+const usageConsole = document.getElementById('usageConsole');
+const meterBar = document.getElementById('meterBar');
+const sessionDuration = document.getElementById('sessionDuration');
+
+const netType = document.getElementById('netType');
+const downUp = document.getElementById('downUp');
+const rttSave = document.getElementById('rttSave');
+const onlineStatus = document.getElementById('onlineStatus');
+
+let ipLog = [];
+let lastIpResponse = null;
+let sessionStart = Date.now();
+let measuredBytes = 0; // bytes explicitly measured (fetches)
+let lastResourceTotal = 0; // last total measured via Performance API
+
+// helpers
+function fmtBytes(n){
+  if(n === 0) return '0 B';
+  const thresh = 1024;
+  if(Math.abs(n) < thresh) return n + ' B';
+  const units = ['KB','MB','GB','TB'];
+  let u = -1;
+  do { n /= thresh; ++u; } while(Math.abs(n) >= thresh && u < units.length-1);
+  return n.toFixed(2) + ' ' + units[u];
+}
+function nowTS(){ return new Date().toLocaleTimeString(); }
+
+async function fetchPublicIP(force=false){
+  try{
+    const start = performance.now();
+    const res = await fetch(IP_API, { cache: 'no-store' });
+    // measure the raw response size if possible
+    let size = 0;
+    try {
+      // read as blob to get bytes
+      const blob = await res.clone().blob();
+      size = blob.size || 0;
+    } catch(e){ size = 0; }
+
+    // parse JSON
+    const data = await res.json();
+    lastIpResponse = data;
+    const took = Math.round(performance.now() - start);
+
+    // update UI
+    const ip = data.ip || '—';
+    ipAddressEl.textContent = ip;
+    ipAddressEl.title = 'Click to copy';
+    rawJson.textContent = JSON.stringify(data, null, 2);
+
+    // attempt to fetch geo/isp info (may be blocked by CORS)
+    try {
+      const geoRes = await fetch(`${GEO_API}${ip}/json`, { cache: 'no-store' });
+      const geo = await geoRes.json();
+      ispEl.textContent = geo.org || geo.asn || '—';
+      locationEl.textContent = [geo.country_name, geo.region, geo.city].filter(Boolean).join(', ') || '—';
+    } catch(err) {
+      // fallback / permission-cors blocked
+      ispEl.textContent = 'Unavailable (CORS)';
+      locationEl.textContent = 'Unavailable (CORS)';
+    }
+
+    // log
+    const entry = `${nowTS()} • ${ip} • ${fmtBytes(size)} • ${took}ms`;
+    ipLog.unshift(entry);
+    if(ipLog.length>20) ipLog.pop();
+    ipConsole.textContent = ipLog.join("\n");
+
+    // measured bytes
+    if(size) {
+      measuredBytes += size;
+      updateDataUsage();
+      usageConsole.textContent = `Measured fetch size: ${fmtBytes(size)} (ip API)\n\n` + usageConsole.textContent;
+    } else {
+      usageConsole.textContent = `Measured fetch size: unknown\n\n` + usageConsole.textContent;
+    }
+
+    return data;
+  }catch(err){
+    ipAddressEl.textContent = 'error';
+    ipConsole.textContent = `Error fetching IP: ${err.message}\n` + ipConsole.textContent;
+    rawJson.textContent = `Error: ${err.message}`;
+    return null;
+  }
+}
+
+// get resource transfer size sum (PerformanceResourceTiming.transferSize)
+function computeResourceTransfer(){
+  // Some browsers restrict transferSize for cross-origin resources unless opt-in.
+  if(!performance || !performance.getEntriesByType) return 0;
+  const resources = performance.getEntriesByType('resource') || [];
+  let total = 0;
+  for(const r of resources){
+    // transferSize exists in browsers that support it (Chrome, Edge). For others it may be 0.
+    if(typeof r.transferSize === 'number') total += r.transferSize;
+    else if(r.encodedBodySize) total += r.encodedBodySize; // fallback to encoded size
+  }
+  return total;
+}
+
+function updateDataUsage(){
+  // combine resource sizes and measured fetches
+  const resourceTotal = computeResourceTransfer();
+  // If resourceTotal decreased (rare), keep lastResourceTotal as a floor
+  if(resourceTotal < lastResourceTotal) lastResourceTotal = resourceTotal;
+  else lastResourceTotal = resourceTotal;
+
+  const total = lastResourceTotal + measuredBytes;
+  dataUsageEl.textContent = fmtBytes(total);
+
+  // session duration
+  const s = Math.round((Date.now() - sessionStart)/1000);
+  sessionDuration.textContent = `${s}s`;
+
+  // meter: scale heuristically (0..50MB)
+  const cap = 50 * 1024 * 1024;
+  const pct = Math.min(100, Math.round((total / cap) * 100));
+  meterBar.style.width = pct + '%';
+  meterBar.title = fmtBytes(total);
+
+  usageConsole.textContent = `Resource timing total: ${fmtBytes(lastResourceTotal)}
+Measured explicit fetch bytes: ${fmtBytes(measuredBytes)}
+Combined estimate: ${fmtBytes(total)}
+
+Note:
+- 'transferSize' from performance entries is used when available.
+- Browsers may zero-out sizes for privacy or cross-origin protection.
+- This is an estimate of page/session usage only.
+` + usageConsole.textContent.slice(0,1000);
+}
+
+// periodic updater
+let autoRefreshTimer = null;
+function startAutoRefresh(){
+  if(autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => fetchPublicIP(), 60_000); // every 60s
+}
+startAutoRefresh();
+
+// copy IP
+async function copyIP(){
+  try {
+    const text = ipAddressEl.textContent || '';
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = 'Copied';
+    setTimeout(()=>copyBtn.textContent='Copy', 1200);
+  } catch(e) {
+    copyBtn.textContent = 'No clipboard';
+    setTimeout(()=>copyBtn.textContent='Copy', 1200);
+  }
+}
+ipAddressEl.addEventListener('click', copyIP);
+copyBtn.addEventListener('click', copyIP);
+refreshBtn.addEventListener('click', ()=>fetchPublicIP(true));
+
+// measure button: fetch a test blob (~50 KB) from a simple endpoint (we'll create data via blob URL)
+measureBtn.addEventListener('click', async ()=>{
+  // Create a 50KB blob and fetch it via object URL to simulate a fetch (can't get transferSize across origins easily).
+  const size = 50 * 1024;
+  const arr = new Uint8Array(size);
+  for(let i=0;i<size;i++) arr[i] = i % 256;
+  const blob = new Blob([arr], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  try{
+    const r = await fetch(url);
+    const b = await r.blob();
+    const s = b.size || 0;
+    measuredBytes += s;
+    usageConsole.textContent = `Test fetch measured ${fmtBytes(s)}\n` + usageConsole.textContent;
+    updateDataUsage();
+  }catch(e){
+    usageConsole.textContent = `Test fetch error: ${e.message}\n` + usageConsole.textContent;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+});
+
+// run small resource test: load an image (data url) and an XHR to same origin (will show in performance)
+runtestBtn.addEventListener('click', ()=>{
+  // tiny image
+  const img = new Image();
+  img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='400' height='100'><rect width='100%' height='100%' fill='#001428'/><text x='10' y='50' fill='#07f' font-family='monospace' font-size='24'>test</text></svg>`);
+  img.onload = ()=> {
+    usageConsole.textContent = 'Inline image loaded (data URL). Performance entries may not include transfer size for data URLs.\n' + usageConsole.textContent;
+    updateDataUsage();
+  };
+  // tiny XHR to IP API (will be cross-origin)
+  fetchPublicIP();
+});
+
+// reset button
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  measuredBytes = 0;
+  lastResourceTotal = 0;
+  sessionStart = Date.now();
+  ipLog = [];
+  ipConsole.textContent = '';
+  usageConsole.textContent = 'Reset. Resource timing will repopulate.\n';
+  updateDataUsage();
+});
+
+// update network info from Network Information API (if available)
+function updateNetworkInfo(){
+  const nav = navigator;
+  if(nav.connection){
+    const c = nav.connection;
+    netType.textContent = (c.effectiveType || c.type || '—');
+    downUp.textContent = `down: ${c.downlink ? c.downlink + 'Mb/s' : '—'} • rtt: ${c.rtt ? c.rtt + 'ms' : '—'}`;
+    rttSave.textContent = `Effective type: ${c.effectiveType || '—'} • Save Data: ${c.saveData ? 'on' : 'off'}`;
+    c.addEventListener('change', updateNetworkInfo);
+  } else {
+    netType.textContent = 'N/A';
+    downUp.textContent = 'Network API not supported';
+    rttSave.textContent = '—';
+  }
+  onlineStatus.textContent = navigator.onLine ? 'online' : 'offline';
+}
+window.addEventListener('online', updateNetworkInfo);
+window.addEventListener('offline', updateNetworkInfo);
+updateNetworkInfo();
+
+// periodically update resource totals (performance entries can appear as resources load)
+setInterval(updateDataUsage, 1200);
+
+// initial actions
+fetchPublicIP();
+updateDataUsage();
+
+// small accessibility: keyboard copy when focused and Enter pressed on IP
+ipAddressEl.tabIndex = 0;
+ipAddressEl.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') copyIP(); });
+
+</script>
+</body>
+</html>
